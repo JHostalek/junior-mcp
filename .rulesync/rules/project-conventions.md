@@ -4,67 +4,69 @@ description: "Project-specific architecture, conventions, testing, linting, and 
 targets: ["*"]
 ---
 
-# Junior — Project Conventions
+# junior-mcp — Project Conventions
 
-Autonomous software development CLI that queues tasks and executes them via headless Claude Code in git worktrees.
+MCP server that wraps the Junior CLI. Exposes task queue, schedules, hooks, and daemon control to AI coding agents via the Model Context Protocol.
+
+**Key constraint:** pure CLI wrapper. No direct database access, no Junior library imports. Every operation shells out to `junior` via `Bun.spawn()`.
 
 ## Stack
 
 - TypeScript (strict), Bun runtime, ESM
-- CLI: Commander.js
-- DB: SQLite via Drizzle ORM + bun:sqlite (WAL mode)
-- TUI: React + Ink
-- Validation: Zod
-- Config/task files: YAML
-- Scheduling: Croner (cron expressions)
-- Build: `bun build --compile` (single native binary)
+- MCP SDK: `@modelcontextprotocol/sdk` (server + stdio transport)
+- Validation: Zod (tool input schemas)
+- Build: `bun build --compile` (single native binary at `dist/junior-mcp`)
+- Runtime dependency: `junior` CLI must be on `PATH`
 
 ## Architecture
 
 ```
-src/
-├── index.ts          # CLI entry, Commander setup
-├── cli/              # Subcommands: task, daemon, schedule, config
-├── core/             # Utilities: git ops, config, claude spawning, logging, errors, paths, events
-├── daemon/           # Background service: executor, poll loop, scheduler, recovery
-├── tui/              # Terminal UI: React + Ink components
-└── db/               # Drizzle schema, migrations, db init
+stdin (MCP JSON-RPC) → McpServer → tool handler → runJunior() → Bun.spawn(['junior', ...args]) → stdout/stderr → MCP response
 ```
 
-**Runtime data** lives in `.junior/` within the target repo:
-- `config.yaml` — user config (max_concurrency default: 2)
-- `junior.db` — SQLite database
-- `logs/` — per-job execution logs
-- `worktrees/` — git worktrees for isolated execution
-- `events` — change notification file (daemon writes, TUI watches)
+stdio-based server. The MCP SDK handles protocol framing over stdin/stdout. Each tool handler translates MCP calls into CLI invocations and returns the CLI output as text content. Errors are surfaced via `isError: true` when the CLI exits non-zero.
 
-**Job execution flow**: create worktree → symlink gitignored files → spawn Claude Code (`--output-format stream-json`) → capture result → remove symlinks → merge branch into base (`--no-ff`) → remove worktree → delete branch.
+```
+src/
+├── index.ts           # Entry point: creates McpServer, registers all tool modules, connects StdioServerTransport
+├── cli.ts             # CLI wrapper: runJunior(args) → Bun.spawn(['junior', ...args]) → { stdout, stderr, exitCode }
+└── tools/
+    ├── tasks.ts       # 7 tools: create_task, list_tasks, show_task, cancel_task, retry_task, delete_task, task_logs
+    ├── schedules.ts   # 5 tools: create_schedule, list_schedules, pause_schedule, resume_schedule, remove_schedule
+    ├── hooks.ts       # 5 tools: create_hook, list_hooks, pause_hook, resume_hook, remove_hook
+    ├── daemon.ts      # 1 tool: daemon_status
+    └── *.test.ts      # Co-located tests
+```
 
-**TUI updates**: daemon writes to `.junior/events` on state changes. TUI watches this file with `fs.watch()` and re-queries DB. 10s fallback poll for daemon status changes.
+3 source files, 4 tool modules, 18 total tools.
 
 ## Conventions
 
 - IMPORTANT: Always run `bun run build` after completing a task
 - IMPORTANT: No comments in code unless explicitly requested
-- Error hierarchy: `JuniorError` base class with typed subclasses (`TaskFileError`, `ConfigError`, `DaemonError`, `GitError`, `ClaudeError`)
-- All process spawning uses `Bun.spawn()` (never node:child_process)
-- All git operations use `Bun.spawn()` with array args (never shell strings)
-- Structured JSON logging to stderr: `[ISO_TIMESTAMP] [LEVEL] message {metadata}`
-- Database columns use `snake_case`, TypeScript properties use `camelCase`
-- Cross-directory imports use `@/*` path aliases (e.g. `@/core/paths.js`); same-directory imports use `./`
+- All CLI delegation goes through `runJunior()` in `src/cli.ts` — never call `Bun.spawn(['junior', ...])` directly from tool handlers
+- Tool handlers follow a strict pattern: call `runJunior(args)`, check `exitCode`, return `{ content: [{ type: 'text', text }], isError? }`
+- Error responses prefer `stderr` over `stdout` (fallback to stdout when stderr is empty)
+- Input validation uses Zod schemas passed to `server.registerTool()` via `inputSchema`
 - All imports use explicit `.js` extensions (ESM requirement)
-- Environment variables are centralized in `core/flags.ts` (`Flag` namespace)
-- DB schema changes go through `db/migrations.ts` (embedded SQL, binary-compatible)
-- Use existing Zod schemas for validation — do not add ad-hoc validation
-- Daemon uses signal handlers (SIGTERM/SIGINT) for graceful shutdown
-- Call `notifyChange()` from `core/events.ts` after any DB state mutation in the daemon
+- Same-directory imports use `./`; no `@/*` path aliases (flat structure doesn't need them)
+
+### Adding a New Tool
+
+1. Decide which tool module it belongs to (or create a new `src/tools/<category>.ts`)
+2. Inside the `register<Category>Tools(server)` function, call `server.registerTool(name, { description, inputSchema }, handler)`
+3. The handler calls `runJunior([...args])` and returns the standard response shape
+4. If creating a new module, add a `register<Category>Tools` export and wire it in `src/index.ts`
+5. Add tests in `src/tools/<category>.test.ts` following the existing mock pattern
 
 ## Testing
 
 - Test runner: Bun built-in (`bun test`), Jest-compatible API
-- Test files co-located with source: `src/core/foo.test.ts` next to `src/core/foo.ts`
-- Use `bun:test` imports (`describe`, `test`, `expect`, `spyOn`, `mock`, `beforeEach`, `afterEach`)
-- Same-directory imports in tests use `./` with `.js` extension (e.g. `import { foo } from './bar.js'`)
+- Test files co-located with source: `src/tools/tasks.test.ts` next to `src/tools/tasks.ts`
+- Use `bun:test` imports (`describe`, `test`, `expect`, `mock`, `beforeEach`)
+- **Mock strategy:** `mock.module('../cli.js', () => ({ runJunior: runJuniorMock }))` — all tests mock the CLI layer, never spawn real processes
+- **Mock server:** `createMockServer()` captures `registerTool` calls; `getTool(tools, name)` retrieves a specific tool handler for invocation
+- Each test file verifies: correct tool count registered, correct CLI args passed, success response shape, error response shape (exitCode !== 0), stderr-over-stdout preference
 
 ## Linting
 
@@ -74,9 +76,8 @@ src/
 
 ## Gotchas
 
-- The `.junior/` directory is per-repo (cwd-relative), not global — `drizzle.config.ts` also uses `cwd/.junior/junior.db`
-- Worktree symlinks include `node_modules`, `.env`, `.claude/` — these must not be committed
-- Job retries: max 2 attempts with 60s backoff — do not change without discussion
-- SQLite WAL mode is required for daemon concurrency — never switch to default journal mode
-- Worktree must be removed AFTER merging into base — the branch's merge commit lives in the worktree, removing it first destroys the commit
+- `junior` CLI must be installed and on `PATH` — the server will fail silently with unhelpful errors if it's missing
+- MCP protocol uses stdout for responses — all diagnostic logging goes to stderr (`console.error`)
 - `bun build --compile` produces a self-contained binary — `process.execPath` points to the binary itself
+- `list_tasks` passes `--json` to get machine-readable output; other tools return human-readable text
+- The server has no state — every request is a fresh CLI invocation; no caching, no connection pooling

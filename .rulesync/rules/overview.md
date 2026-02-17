@@ -18,7 +18,8 @@ This file is the source of truth for project-specific information. If it doesn't
 **TypeScript/Bun:**
 
 ```bash
-bun run build              # Compile to standalone binary
+bun run build              # Compile to standalone binary (dist/junior-mcp)
+bun run dev                # Watch mode (bun --watch src/index.ts)
 bun run typecheck          # TypeScript type checker (tsc --noEmit)
 bun run test               # Run tests (Bun built-in runner)
 bun run lint               # Lint with Biome
@@ -26,9 +27,6 @@ bun run lint:fix           # Auto-fix lint issues
 bun run check              # Typecheck + lint
 bun add <package>          # Add dependency
 ```
-
-**Configuration:**
-- Environment variables: centralized in `core/flags.ts` (`Flag` namespace)
 
 ---
 

@@ -23,6 +23,11 @@
     "developer-tools"
   ],
   "type": "module",
+  "files": [
+    "dist/junior-mcp",
+    "LICENSE",
+    "README.md"
+  ],
   "bin": {
     "junior-mcp": "./dist/junior-mcp"
   },
