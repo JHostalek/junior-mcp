@@ -66,3 +66,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Plans
+docs/plans

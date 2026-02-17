@@ -1,6 +1,6 @@
 {
   "name": "junior-mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MCP server for Junior — expose task queue, schedules, and hooks to Claude Code",
   "license": "MIT",
   "author": "Jan Hostalek",
@@ -31,12 +31,14 @@
   },
   "scripts": {
     "build": "bun build src/index.ts --compile --outfile dist/junior-mcp",
+    "build:all": "bun build src/index.ts --compile --target=bun-linux-x64 --outfile dist/junior-mcp-linux-x64 && bun build src/index.ts --compile --target=bun-linux-arm64 --outfile dist/junior-mcp-linux-arm64 && bun build src/index.ts --compile --target=bun-darwin-x64 --outfile dist/junior-mcp-darwin-x64 && bun build src/index.ts --compile --target=bun-darwin-arm64 --outfile dist/junior-mcp-darwin-arm64",
     "dev": "bun --watch src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "check": "bun run typecheck && bun run lint"
+    "check": "bun run typecheck && bun run lint",
+    "test": "bun test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

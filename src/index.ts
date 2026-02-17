@@ -8,7 +8,7 @@ import { registerTaskTools } from './tools/tasks.js';
 
 const server = new McpServer({
   name: 'junior-mcp',
-  version: '0.1.0',
+  version: '1.0.0',
 });
 
 registerTaskTools(server);
