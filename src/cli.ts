@@ -1,19 +1,19 @@
+import { execFile } from 'node:child_process';
+
 export interface CliResult {
   stdout: string;
   stderr: string;
   exitCode: number;
 }
 
-export async function runJunior(args: string[]): Promise<CliResult> {
-  const proc = Bun.spawn(['junior', ...args], {
-    stdout: 'pipe',
-    stderr: 'pipe',
-    stdin: 'ignore',
+export function runJunior(args: string[]): Promise<CliResult> {
+  return new Promise((resolve) => {
+    execFile('junior', args, { encoding: 'utf-8' }, (error, stdout, stderr) => {
+      resolve({
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        exitCode: error?.code && typeof error.code === 'number' ? error.code : error ? 1 : 0,
+      });
+    });
   });
-
-  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
-
-  const exitCode = await proc.exited;
-
-  return { stdout: stdout.trim(), stderr: stderr.trim(), exitCode };
 }

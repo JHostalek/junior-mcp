@@ -1,50 +1,38 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import { runJunior } from './cli.js';
 
-function makeProc(stdout: string, stderr: string, exitCode: number) {
-  return {
-    stdout: new Response(stdout).body,
-    stderr: new Response(stderr).body,
-    exited: Promise.resolve(exitCode),
-    pid: 1,
-    stdin: undefined,
-    kill: () => {},
-    ref: () => {},
-    unref: () => {},
-    exitCode: null,
-    signalCode: null,
-    killed: false,
-    readable: new ReadableStream(),
-    resourceUsage: () => ({ userCPUTime: 0, systemCPUTime: 0, maxRSS: 0 }),
-  };
-}
+type ExecFileCallback = (error: Error | null, stdout: string, stderr: string) => void;
 
-const spawnMock = mock();
+const execFileMock = mock();
 
-const originalSpawn = Bun.spawn;
+mock.module('node:child_process', () => ({
+  execFile: execFileMock,
+}));
 
 afterEach(() => {
-  spawnMock.mockRestore();
-  Bun.spawn = originalSpawn;
+  execFileMock.mockReset();
 });
 
 describe('runJunior', () => {
-  test('spawns junior with correct args', async () => {
-    spawnMock.mockImplementation(() => makeProc('ok', '', 0));
-    Bun.spawn = spawnMock as typeof Bun.spawn;
+  test('calls execFile with correct args', async () => {
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
+      cb(null, 'ok', '');
+    });
 
     await runJunior(['task', 'list', '--json']);
 
-    expect(spawnMock).toHaveBeenCalledWith(['junior', 'task', 'list', '--json'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-      stdin: 'ignore',
-    });
+    expect(execFileMock).toHaveBeenCalledWith(
+      'junior',
+      ['task', 'list', '--json'],
+      expect.any(Object),
+      expect.any(Function),
+    );
   });
 
   test('returns stdout, stderr, and exitCode', async () => {
-    spawnMock.mockImplementation(() => makeProc('output text', 'error text', 0));
-    Bun.spawn = spawnMock as typeof Bun.spawn;
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
+      cb(null, 'output text', 'error text');
+    });
 
     const result = await runJunior(['task', 'show', '1']);
 
@@ -52,8 +40,9 @@ describe('runJunior', () => {
   });
 
   test('trims whitespace from stdout and stderr', async () => {
-    spawnMock.mockImplementation(() => makeProc('  hello world  \n', '  warn  \n', 0));
-    Bun.spawn = spawnMock as typeof Bun.spawn;
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
+      cb(null, '  hello world  \n', '  warn  \n');
+    });
 
     const result = await runJunior(['daemon', 'status']);
 
@@ -62,8 +51,10 @@ describe('runJunior', () => {
   });
 
   test('returns non-zero exitCode on failure', async () => {
-    spawnMock.mockImplementation(() => makeProc('', 'not found', 1));
-    Bun.spawn = spawnMock as typeof Bun.spawn;
+    execFileMock.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: ExecFileCallback) => {
+      const error = Object.assign(new Error('Command failed'), { code: 1 });
+      cb(error, '', 'not found');
+    });
 
     const result = await runJunior(['task', 'show', '999']);
 
