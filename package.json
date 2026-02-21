@@ -1,6 +1,6 @@
 {
   "name": "@jhostalek/junior-mcp",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "MCP server for Junior — expose task queue, schedules, and hooks to Claude Code",
   "license": "MIT",
   "author": "Jan Hostalek",
