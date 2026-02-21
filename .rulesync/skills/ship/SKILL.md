@@ -1,8 +1,8 @@
 ---
 name: ship
 description: >-
-  Build, test, and publish @jhostalek/junior-mcp to npm. Bumps version, runs
-  quality gates, builds npm bundle, publishes, and verifies.
+  Bump version, build, verify, tag, and push @jhostalek/junior-mcp. CI handles
+  npm publish automatically on tag push.
 ---
 version_bump = $ARGUMENTS
 
@@ -38,20 +38,14 @@ version_bump = $ARGUMENTS
 
 6. **Confirm with user**: Show version, file list, size — ask for go/no-go
 
-7. **Publish**: `npm publish --access public`
+7. **Commit version bump**: commit `package.json` with message `chore: bump version to <new_version>`
 
-8. **Verify**:
-   - `npm view @jhostalek/junior-mcp version` — must match new version
-   - Test: run `npx -y @jhostalek/junior-mcp` for 2 seconds, verify it starts without crash
-
-9. **Commit version bump**: commit `package.json` with message `chore: bump version to <new_version>`
-
-10. **Tag and push**: `git tag v<new_version> && git push && git push --tags`
+8. **Tag and push**: `git tag v<new_version> && git push && git push --tags`
 
 ## Output
 
 ```
-Published @jhostalek/junior-mcp@<version>
+Tagged @jhostalek/junior-mcp@<version> — CI will publish to npm
 npm: https://www.npmjs.com/package/@jhostalek/junior-mcp
 npx: npx -y @jhostalek/junior-mcp
 ```
