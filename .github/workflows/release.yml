@@ -50,9 +50,6 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org
 
-      - name: Install npm with trusted publishing support
-        run: npm install -g npm@latest
-
       - run: bun install
 
       - name: Quality gates
